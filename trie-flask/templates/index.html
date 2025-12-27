@@ -1,0 +1,151 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8"/>
+  <title>Trie Autocomplete AKA (Flask)</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 20px; }
+    .box { padding: 12px; border: 1px solid #ddd; border-radius: 10px; margin-bottom: 16px; }
+    input, textarea { width: 100%; padding: 8px; margin-top: 6px; }
+    button { padding: 10px 14px; cursor: pointer; }
+    table { border-collapse: collapse; width: 100%; }
+    th, td { border: 1px solid #ddd; padding: 6px; font-size: 13px; }
+    th { background: #f6f6f6; }
+    .small { font-size: 13px; color: #444; }
+    img { max-width: 100%; border: 1px solid #ddd; border-radius: 8px; }
+    .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  </style>
+</head>
+<body>
+
+<h2>Trie Autocomplete — Iteratif vs Rekursif (Flask)</h2>
+
+{% with messages = get_flashed_messages() %}
+  {% if messages %}
+    <div class="box">
+      {% for msg in messages %}
+        <div class="small">{{ msg }}</div>
+      {% endfor %}
+    </div>
+  {% endif %}
+{% endwith %}
+
+<div class="box">
+  <h3>1) Upload Dataset</h3>
+  <form action="/upload" method="post" enctype="multipart/form-data">
+    <input type="file" name="file" accept=".csv" />
+    <button type="submit">Upload</button>
+  </form>
+  <div class="small">
+    Status: {% if csv_loaded %}<b>CSV loaded</b> (total baris: {{ total_rows }}){% else %}belum upload{% endif %}
+  </div>
+</div>
+
+<div class="box">
+  <h3>2) Jalankan Eksperimen</h3>
+  <form action="/run" method="post">
+    <div class="grid">
+      <div>
+        <label>MAX_ROWS (batasi baris dipakai)</label>
+        <input name="max_rows" type="number" value="{{ params.max_rows if params else 50000 }}" />
+      </div>
+      <div>
+        <label>MAX_LEN (potong panjang string)</label>
+        <input name="max_len" type="number" value="{{ params.max_len if params else 80 }}" />
+      </div>
+      <div>
+        <label>TOP_K (jumlah suggestion)</label>
+        <input name="top_k" type="number" value="{{ params.top_k if params else 10 }}" />
+      </div>
+      <div>
+        <label>MAX_DEPTH (batas rekursif)</label>
+        <input name="max_depth" type="number" value="{{ params.max_depth if params else 200 }}" />
+      </div>
+    </div>
+
+    <label>N list (iterasi ukuran input, pisah koma)</label>
+    <input name="n_list" placeholder="contoh: 10,50,100,500,1000" value="{{ params.n_list if params else '' }}" />
+
+    <label>Prefix uji (1 baris = 1 prefix)</label>
+    <textarea name="prefixes" rows="6" placeholder="contoh:\nwin\nlug\ntsa">{{ params.prefixes if params else '' }}</textarea>
+
+    <button type="submit">RUN</button>
+  </form>
+</div>
+
+{% if agg_table %}
+<div class="box">
+  <h3>3) Grafik</h3>
+  <div class="grid">
+    <div>
+      <h4>Iteratif</h4>
+      <img src="data:image/png;base64,{{ png_iter | b64encode }}" />
+    </div>
+    <div>
+      <h4>Rekursif</h4>
+      <img src="data:image/png;base64,{{ png_rec | b64encode }}" />
+    </div>
+  </div>
+  <div style="margin-top:12px;">
+    <h4>Gabungan</h4>
+    <img src="data:image/png;base64,{{ png_both | b64encode }}" />
+  </div>
+</div>
+
+<div class="box">
+  <h3>4) Tabel Agregasi (Mean per N)</h3>
+  <table>
+    <thead>
+      <tr>
+        {% for c in agg_cols %}
+        <th>{{ c }}</th>
+        {% endfor %}
+      </tr>
+    </thead>
+    <tbody>
+      {% for r in agg_table %}
+      <tr>
+        {% for c in agg_cols %}
+        <td>{{ r[c] }}</td>
+        {% endfor %}
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+
+  <form action="/download_agg" method="post" style="margin-top:10px;">
+    <input type="hidden" name="csv_data" value="{{ agg_bytes.decode('utf-8') }}" />
+    <button type="submit">Download agregasi CSV</button>
+  </form>
+</div>
+
+<div class="box">
+  <h3>5) Tabel Hasil (ditampilkan 200 baris pertama)</h3>
+  <table>
+    <thead>
+      <tr>
+        {% for c in result_cols %}
+        <th>{{ c }}</th>
+        {% endfor %}
+      </tr>
+    </thead>
+    <tbody>
+      {% for r in result_table %}
+      <tr>
+        {% for c in result_cols %}
+        <td>{{ r[c] }}</td>
+        {% endfor %}
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+
+  <form action="/download_res" method="post" style="margin-top:10px;">
+    <input type="hidden" name="csv_data" value="{{ csv_bytes.decode('utf-8') }}" />
+    <button type="submit">Download hasil CSV</button>
+  </form>
+</div>
+{% endif %}
+
+</body>
+</html>
