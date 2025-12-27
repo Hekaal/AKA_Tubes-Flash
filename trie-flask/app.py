@@ -181,6 +181,14 @@ STATE = {
     "total_rows": 0,
 }
 
+import base64
+from markupsafe import Markup
+
+@app.template_filter("b64encode")
+def b64encode_filter(data: bytes):
+    if data is None:
+        return ""
+    return base64.b64encode(data).decode("utf-8")
 
 @app.route("/", methods=["GET"])
 def index():
