@@ -10,7 +10,6 @@
 </head>
 
 <body>
-  <!-- Top Bar -->
   <header class="topbar">
     <div class="brand">
       <div class="logo">T</div>
@@ -37,119 +36,184 @@
       {% endif %}
     {% endwith %}
 
-    <section class="grid2">
-      <!-- Upload -->
-      <section class="card">
-        <div class="card-head">
-          <h2>1) Upload Dataset</h2>
-          <span class="badge">{{ "Loaded" if state.csv_path else "Not loaded" }}</span>
+    <!-- =========================
+         1) DATASET
+         ========================= -->
+    <section class="card">
+      <div class="card-head">
+        <h2>1) Dataset Lokal</h2>
+        <span class="badge {{ 'badge-soft' if state.dataset_ok else '' }}">
+          {{ "OK" if state.dataset_ok else "ERROR" }}
+        </span>
+      </div>
+
+      <p class="muted">
+        Dataset dibaca dari path lokal (tanpa upload). Kolom wajib: <code>product_name</code>.
+      </p>
+
+      <form action="/set_path" method="post" class="form">
+        <label>CSV Path</label>
+        <input name="csv_path" id="csvPath" value="{{ state.csv_path }}" placeholder="contoh: D:\AKA\...\amazon_products.csv">
+
+        <div class="actions">
+          <button class="btn btn-primary" type="submit">Set Path</button>
+          <button class="btn btn-ghost" type="button" id="useDefaultPath">Pakai default (amazon_products.csv)</button>
         </div>
-
-        <p class="muted">CSV wajib punya kolom <code>product_name</code>. Dataset kamu besar? aman, nanti dibatasi via MAX_ROWS.</p>
-
-        <form action="/upload" method="post" enctype="multipart/form-data" class="form">
-          <label class="file">
-            <input type="file" name="file" accept=".csv" required>
-            <span>Pilih CSV…</span>
-          </label>
-          <button class="btn btn-primary" type="submit">Upload</button>
-        </form>
 
         <div class="meta">
-          <div><b>File:</b> {{ state.csv_name if state.csv_name else "-" }}</div>
+          <div><b>Status:</b> {{ state.dataset_msg }}</div>
           <div><b>Total baris:</b> {{ state.total_rows if state.total_rows else "-" }}</div>
         </div>
-      </section>
+      </form>
 
-      <!-- Run -->
-      <section class="card">
-        <div class="card-head">
-          <h2>2) Eksperimen</h2>
-          <span class="badge badge-soft">Manual input</span>
+      {% if state.dataset_ok %}
+        <form action="/set_preview" method="post" class="form" style="margin-top:10px;">
+          <label>Preview rows</label>
+          <div class="actions">
+            <select name="preview_n" style="max-width:220px;">
+              {% for opt in state.preview_choices %}
+                <option value="{{ opt }}" {% if opt == state.preview_n %}selected{% endif %}>{{ opt }} baris</option>
+              {% endfor %}
+            </select>
+            <button class="btn btn-ghost" type="submit">Terapkan</button>
+          </div>
+          <div class="hint">Preview hanya untuk tampilan (scroll internal), tidak mempengaruhi eksperimen.</div>
+        </form>
+      {% endif %}
+
+      {% if state.dataset_ok and state.preview_rows %}
+        <div class="note" style="margin-top:14px;">
+          <b>Preview {{ state.preview_n }} baris (RAW vs CLEANED)</b><br/>
+          <span class="muted">RAW = teks asli dari product_name. CLEANED = lowercase + hapus simbol + rapikan spasi.</span>
         </div>
 
-        <p class="muted">
-          Isi <b>N list</b> (iterasi ukuran input) dan <b>prefix</b> (1 baris 1 prefix).
-          Untuk membuat grafik lebih “wajar”, aktifkan smoothing (moving average).
-        </p>
+        <div class="table-wrap preview-wrap" style="margin-top:10px;">
+          <table class="table-preview">
+            <thead>
+              <tr>
+                <th>raw</th>
+                <th>cleaned</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for r in state.preview_rows %}
+                <tr>
+                  <td class="cell-wrap">{{ r["raw"] }}</td>
+                  <td class="cell-wrap">{{ r["cleaned"] }}</td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      {% endif %}
+    </section>
 
-        <form action="/run" method="post" class="form" id="runForm">
-          <div class="grid4">
-            <div>
-              <label>MAX_ROWS</label>
-              <input name="max_rows" type="number" min="1000" step="1000"
-                     value="{{ state.params.max_rows }}">
-              <div class="hint">Batas baris dipakai (boleh sampai total).</div>
-            </div>
-            <div>
-              <label>MAX_LEN</label>
-              <input name="max_len" type="number" min="30" max="200" step="10"
-                     value="{{ state.params.max_len }}">
-              <div class="hint">Potong panjang teks agar Trie stabil.</div>
-            </div>
-            <div>
-              <label>TOP_K</label>
-              <input name="top_k" type="number" min="1" max="50" step="1"
-                     value="{{ state.params.top_k }}">
-              <div class="hint">Jumlah suggestion (top-k).</div>
-            </div>
-            <div>
-              <label>MAX_DEPTH</label>
-              <input name="max_depth" type="number" min="50" max="500" step="10"
-                     value="{{ state.params.max_depth }}">
-              <div class="hint">Batas kedalaman rekursif.</div>
-            </div>
+    <!-- =========================
+         2) EKSPERIMEN
+         ========================= -->
+    <section class="card" style="margin-top:14px;">
+      <div class="card-head">
+        <h2>2) Eksperimen</h2>
+        <span class="badge badge-soft">Median timing + Build time</span>
+      </div>
+
+      <p class="muted">
+        Pengukuran waktu memakai <b>median</b> dari beberapa run (repeats) + <b>warmup</b> untuk mengurangi noise.
+      </p>
+
+      <form action="/run" method="post" class="form" id="runForm">
+        <div class="grid4">
+          <div>
+            <label>MAX_ROWS</label>
+            <input name="max_rows" type="number" min="1000" step="1000" value="{{ state.params.max_rows }}">
+            <div class="hint">Batas baris dipakai (maks. = total).</div>
           </div>
-
-          <div class="grid2">
-            <div>
-              <label>Smoothing Window</label>
-              <input name="smooth_window" type="number" min="1" max="9" step="1"
-                     value="{{ state.params.smooth_window }}">
-              <div class="hint">Moving average (1=off). Rekomendasi: 3.</div>
-            </div>
-            <div class="tip">
-              <b>Tips dataset 1 juta baris:</b>
-              <ul>
-                <li>Mulai MAX_ROWS: 50k–200k</li>
-                <li>MAX_LEN: 60–100</li>
-                <li>N list bertahap: 1k, 5k, 10k, 50k, 100k</li>
-              </ul>
-            </div>
+          <div>
+            <label>MAX_LEN</label>
+            <input name="max_len" type="number" min="30" max="200" step="10" value="{{ state.params.max_len }}">
+            <div class="hint">Potong panjang teks agar stabil.</div>
           </div>
+          <div>
+            <label>TOP_K</label>
+            <input name="top_k" type="number" min="1" max="50" step="1" value="{{ state.params.top_k }}">
+            <div class="hint">Jumlah suggestion.</div>
+          </div>
+          <div>
+            <label>MAX_DEPTH</label>
+            <input name="max_depth" type="number" min="50" max="500" step="10" value="{{ state.params.max_depth }}">
+            <div class="hint">Batas rekursif.</div>
+          </div>
+        </div>
 
-          <label>N list (pisah koma)</label>
-          <input name="n_list" id="nList" placeholder="contoh: 1000,5000,10000,50000"
-                 value="{{ state.params.n_list }}">
+        <div class="grid2">
+          <div>
+            <label>Smoothing Window</label>
+            <input name="smooth_window" type="number" min="1" max="9" step="1" value="{{ state.params.smooth_window }}">
+            <div class="hint">Moving average (1=off). Rekomendasi: 3.</div>
+          </div>
+          <div class="tip">
+            <b>Tips dataset besar:</b>
+            <ul>
+              <li>Mulai MAX_ROWS: 50k–200k</li>
+              <li>N list bertahap: 1k, 5k, 10k, 50k, 100k</li>
+              <li>Prefix: campur yang umum & jarang</li>
+            </ul>
+          </div>
+        </div>
 
-          <label>Prefix uji (1 baris = 1 prefix)</label>
-          <textarea name="prefixes" id="prefixes" rows="6" placeholder="contoh:
+        <div class="grid2">
+          <div>
+            <label>Repeats (median)</label>
+            <input name="repeats" type="number" min="1" max="25" step="1" value="{{ state.params.repeats }}">
+            <div class="hint">Disarankan 5–9 (ganjil).</div>
+          </div>
+          <div>
+            <label>Warmup</label>
+            <input name="warmup" type="number" min="0" max="10" step="1" value="{{ state.params.warmup }}">
+            <div class="hint">Disarankan 1–2.</div>
+          </div>
+        </div>
+
+        <label>N list (pisah koma)</label>
+        <input name="n_list" id="nList" placeholder="contoh: 1000,5000,10000,50000" value="{{ state.params.n_list }}">
+
+        <label>Prefix uji (1 baris = 1 prefix)</label>
+        <textarea name="prefixes" id="prefixes" rows="6" placeholder="contoh:
 win
 lug
 tsa
 blue
 carry">{{ state.params.prefixes }}</textarea>
 
-          <div class="actions">
-            <button class="btn btn-primary" type="submit" id="runBtn">RUN Eksperimen</button>
-            <button class="btn btn-ghost" type="button" id="clearInputs">Clear input</button>
-          </div>
+        <div class="actions">
+          <button class="btn btn-primary" type="submit" id="runBtn" {{ "disabled" if not state.dataset_ok else "" }}>
+            RUN Eksperimen
+          </button>
+          <button class="btn btn-ghost" type="button" id="clearInputs">Clear input</button>
+        </div>
 
-          <div class="small muted">
-            Setelah klik RUN, halaman akan memproses (bisa agak lama tergantung N). Jangan spam klik.
-          </div>
-        </form>
-      </section>
+        {% if not state.dataset_ok %}
+          <div class="small muted">Dataset belum valid. Perbaiki path dulu agar tombol RUN aktif.</div>
+        {% endif %}
+      </form>
     </section>
 
+    <!-- =========================
+         3) HASIL
+         ========================= -->
     {% if state.png_iter %}
-      <section class="card">
+      <section class="card" style="margin-top:14px;">
         <div class="card-head">
           <h2>3) Grafik</h2>
           <div class="right">
             <a class="btn btn-ghost" href="/download/agg.csv">Download agregasi CSV</a>
             <a class="btn btn-ghost" href="/download/res.csv">Download hasil CSV</a>
           </div>
+        </div>
+
+        <div class="plot">
+          <h3>Build Trie</h3>
+          <img alt="Build plot" src="data:image/png;base64,{{ state.png_build|b64 }}">
         </div>
 
         <div class="grid2">
@@ -169,70 +233,67 @@ carry">{{ state.params.prefixes }}</textarea>
         </div>
 
         <div class="note">
-          <b>Catatan laporan:</b> Fluktuasi runtime wajar karena scheduling CPU, cache, dan garbage collection.
-          Smoothing (moving average) hanya membantu memperjelas tren, bukan mengubah data.
+          <b>Catatan:</b> Hasil sudah distabilkan dengan median(repeats) + warmup.
+          returned_count ada di tabel agregasi untuk cek fairness jumlah suggestion.
         </div>
       </section>
 
-      <section class="grid2">
-        <section class="card">
-          <div class="card-head">
-            <h2>4) Tabel Agregasi</h2>
-            <span class="badge badge-soft">Mean per N</span>
-          </div>
-          <div class="table-wrap">
-            <table>
-              <thead>
+      <section class="card" style="margin-top:14px;">
+        <div class="card-head">
+          <h2>4) Tabel Agregasi</h2>
+          <span class="badge badge-soft">Mean per N</span>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                {% for c in state.agg_cols %}
+                  <th>{{ c }}</th>
+                {% endfor %}
+              </tr>
+            </thead>
+            <tbody>
+              {% for r in state.agg %}
                 <tr>
                   {% for c in state.agg_cols %}
-                    <th>{{ c }}</th>
+                    <td>{{ r[c] }}</td>
                   {% endfor %}
                 </tr>
-              </thead>
-              <tbody>
-                {% for r in state.agg %}
-                  <tr>
-                    {% for c in state.agg_cols %}
-                      <td>{{ r[c] }}</td>
-                    {% endfor %}
-                  </tr>
-                {% endfor %}
-              </tbody>
-            </table>
-          </div>
-        </section>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </section>
 
-        <section class="card">
-          <div class="card-head">
-            <h2>5) Tabel Hasil</h2>
-            <span class="badge badge-soft">200 baris pertama</span>
-          </div>
-          <div class="table-wrap">
-            <table>
-              <thead>
+      <section class="card" style="margin-top:14px;">
+        <div class="card-head">
+          <h2>5) Tabel Hasil</h2>
+          <span class="badge badge-soft">200 baris pertama</span>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                {% for c in state.res_cols %}
+                  <th>{{ c }}</th>
+                {% endfor %}
+              </tr>
+            </thead>
+            <tbody>
+              {% for r in state.res_head %}
                 <tr>
                   {% for c in state.res_cols %}
-                    <th>{{ c }}</th>
+                    <td>{{ r[c] }}</td>
                   {% endfor %}
                 </tr>
-              </thead>
-              <tbody>
-                {% for r in state.res_head %}
-                  <tr>
-                    {% for c in state.res_cols %}
-                      <td>{{ r[c] }}</td>
-                    {% endfor %}
-                  </tr>
-                {% endfor %}
-              </tbody>
-            </table>
-          </div>
-        </section>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
       </section>
     {% endif %}
   </main>
 
-  <!-- Loading Overlay -->
   <div class="overlay" id="overlay" aria-hidden="true">
     <div class="overlay-card">
       <div class="spinner"></div>
@@ -243,7 +304,7 @@ carry">{{ state.params.prefixes }}</textarea>
 
   <footer class="footer">
     <span>Flask App • Trie Autocomplete AKA</span>
-    <span class="muted">Tip: untuk dataset 1 juta baris, naikkan bertahap.</span>
+    <span class="muted">Build + Query (Iteratif vs Rekursif)</span>
   </footer>
 </body>
 </html>
