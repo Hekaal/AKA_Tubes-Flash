@@ -20,8 +20,6 @@ berdasarkan **running time**, **stabilitas performa**, serta kesesuaiannya denga
 - Rizky Nur Widyatmoko   :103052300053
 - Wildan Aufa Rafid      :1305213022 
 
-*(Diisi sesuai anggota kelompok)*
-
 ---
 
 ## Dataset yang Digunakan
